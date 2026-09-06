@@ -29,7 +29,7 @@ cd /app
 # -------------------------------------------------------------
 echo ""
 echo ">>> [2/5] Compiling Linux GNU target (x86_64-unknown-linux-gnu)..."
-export RUSTFLAGS="-C link-arg=-lresolv"
+unset RUSTFLAGS 2>/dev/null || true
 cargo build --release --target x86_64-unknown-linux-gnu --manifest-path /app/backend/Cargo.toml --bin sieve
 
 # 2.1 Standalone Binary
@@ -156,7 +156,7 @@ export CC_x86_64_unknown_linux_musl=x86_64-linux-musl-gcc
 export CXX_x86_64_unknown_linux_musl=x86_64-linux-musl-g++
 export AR_x86_64_unknown_linux_musl=/opt/x86_64-linux-musl-native/bin/ar
 
-RUSTFLAGS="-C lto=off" cargo build --release --target x86_64-unknown-linux-musl --no-default-features --manifest-path /app/backend/Cargo.toml --bin sieve-core
+cargo build --release --target x86_64-unknown-linux-musl --no-default-features --manifest-path /app/backend/Cargo.toml --bin sieve-core
 cp /app/backend/target/x86_64-unknown-linux-musl/release/sieve-core "$MUSL_DIR/sieve"
 chmod +x "$MUSL_DIR/sieve"
 tar -czf "$MUSL_DIR/sieve-musl-x86_64.tar.gz" -C "$MUSL_DIR" sieve
@@ -169,7 +169,7 @@ echo ""
 echo ">>> [4/5] Compiling Windows target (x86_64-pc-windows-gnu)..."
 export CC_x86_64_pc_windows_gnu=x86_64-w64-mingw32-gcc-posix
 export CXX_x86_64_pc_windows_gnu=x86_64-w64-mingw32-g++-posix
-RUSTFLAGS="-C lto=off" cargo build --release --target x86_64-pc-windows-gnu --no-default-features --manifest-path /app/backend/Cargo.toml --bin sieve-core
+cargo build --release --target x86_64-pc-windows-gnu --no-default-features --manifest-path /app/backend/Cargo.toml --bin sieve-core
 
 cp /app/backend/target/x86_64-pc-windows-gnu/release/sieve-core.exe "$WIN_DIR/sieve.exe"
 echo "✓ Windows standalone executable generated: $WIN_DIR/sieve.exe"
