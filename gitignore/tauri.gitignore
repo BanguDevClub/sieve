@@ -1,0 +1,9 @@
+backend/target/
+dist-build/
+*.appimage
+*.deb
+*.rpm
+*.msi
+*.exe
+*.dmg
+*.app

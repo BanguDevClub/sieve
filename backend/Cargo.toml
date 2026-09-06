@@ -1,0 +1,46 @@
+[package]
+name = "sieve"
+version = "0.1.0"
+description = "Sieve by BanguDevClub - High-performance desktop app for huge CSV files with DuckDB"
+authors = ["BanguDevClub"]
+license = "MIT"
+edition = "2021"
+
+[[bin]]
+name = "sieve"
+path = "src/main.rs"
+required-features = ["gui"]
+
+[[bin]]
+name = "sieve-core"
+path = "src/bin/sieve-core.rs"
+
+[features]
+default = ["custom-protocol", "gui"]
+custom-protocol = ["tauri/custom-protocol"]
+gui = ["dep:tauri", "dep:tauri-build", "dep:rfd"]
+
+[dependencies]
+tauri = { version = "2", optional = true }
+rfd = { version = "0.15", optional = true }
+duckdb = { version = "1.10505", features = ["bundled", "parquet", "json"] }
+calamine = "0.36"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "macros"] }
+thiserror = "2.0"
+chrono = { version = "0.4", features = ["serde"] }
+tempfile = "3.12"
+
+[dev-dependencies]
+tempfile = "3.12"
+
+[build-dependencies]
+tauri-build = { version = "2", optional = true }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+strip = true

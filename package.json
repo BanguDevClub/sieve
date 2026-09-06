@@ -1,0 +1,25 @@
+{
+  "name": "sieve",
+  "version": "0.1.0",
+  "description": "Sieve by BanguDevClub - High-performance desktop app for huge CSV files with DuckDB",
+  "private": true,
+  "scripts": {
+    "dev": "npm --prefix frontend run dev",
+    "build": "npm --prefix frontend run build && cargo build --release --manifest-path backend/Cargo.toml",
+    "check": "npm --prefix frontend run check && cargo check --manifest-path backend/Cargo.toml",
+    "preview": "npm --prefix frontend run preview",
+    "test": "cargo test --manifest-path backend/Cargo.toml",
+    "tauri": "cargo tauri",
+    "build:docker": "docker compose up --build"
+  },
+  "keywords": [
+    "csv",
+    "duckdb",
+    "tauri",
+    "svelte",
+    "data-viewer",
+    "bangudevclub"
+  ],
+  "author": "BanguDevClub",
+  "license": "MIT"
+}

@@ -1,0 +1,12 @@
+services:
+  sieve-builder:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sieve-builder
+    volumes:
+      - .:/app
+    environment:
+      - CARGO_TERM_COLOR=always
+    working_dir: /app
+    command: ["/bin/bash", "/app/scripts/build-all.sh"]
