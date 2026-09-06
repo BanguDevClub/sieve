@@ -4,8 +4,8 @@
   "version": "0.1.0",
   "identifier": "club.bangudev.sieve",
   "build": {
-    "beforeDevCommand": "npm --prefix ../frontend run dev",
-    "beforeBuildCommand": "npm --prefix ../frontend run build",
+    "beforeDevCommand": "node -e \"const fs=require('fs'),cp=require('child_process');const d=fs.existsSync('frontend')?'frontend':'../frontend';cp.spawn('npm',['--prefix',d,'run','dev'],{stdio:'inherit',shell:true})\"",
+    "beforeBuildCommand": "node -e \"const fs=require('fs'),cp=require('child_process');const d=fs.existsSync('frontend')?'frontend':'../frontend';process.exit(cp.spawnSync('npm',['--prefix',d,'run','build'],{stdio:'inherit',shell:true}).status||0)\"",
     "devUrl": "http://localhost:5173",
     "frontendDist": "../frontend/dist"
   },
