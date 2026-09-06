@@ -1,0 +1,385 @@
+name: Native Multi-Platform Build & Release Matrix
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+    inputs:
+      draft_release:
+        description: 'Create a draft release with compiled artifacts'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  # ----------------------------------------------------------------------------
+  # Job 1: Native Cross-Platform Build Matrix (Linux GNU, MUSL, Windows, macOS)
+  # ----------------------------------------------------------------------------
+  build:
+    name: Build (${{ matrix.name }})
+    runs-on: ${{ matrix.platform }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux x86_64 GLIBC (Ubuntu 22.04 LTS)
+          - platform: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            name: linux-x86_64-gnu
+            args: --target x86_64-unknown-linux-gnu
+            os_label: Linux (x86_64 GLIBC)
+            is_linux_gnu: true
+            is_musl: false
+
+          # Linux x86_64 MUSL (Static Standalone CLI)
+          - platform: ubuntu-22.04
+            target: x86_64-unknown-linux-musl
+            name: linux-x86_64-musl
+            args: --target x86_64-unknown-linux-musl
+            os_label: Linux (x86_64 MUSL)
+            is_linux_gnu: false
+            is_musl: true
+
+          # Windows x86_64 (Native MSVC)
+          - platform: windows-latest
+            target: x86_64-pc-windows-msvc
+            name: windows-x86_64
+            args: --target x86_64-pc-windows-msvc
+            os_label: Windows (x86_64)
+            is_linux_gnu: false
+            is_musl: false
+
+          # macOS Apple Silicon (M1/M2/M3/M4)
+          - platform: macos-latest
+            target: aarch64-apple-darwin
+            name: macos-aarch64
+            args: --target aarch64-apple-darwin
+            os_label: macOS (Apple Silicon)
+            is_linux_gnu: false
+            is_musl: false
+
+          # macOS Intel
+          - platform: macos-latest
+            target: x86_64-apple-darwin
+            name: macos-x86_64
+            args: --target x86_64-apple-darwin
+            os_label: macOS (Intel)
+            is_linux_gnu: false
+            is_musl: false
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js Runtime (Node 24 LTS)
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Rust Stable Toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Rust Cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: backend -> backend/target
+
+      # Linux GUI prerequisites (WebKit2GTK, GTK3, AppIndicator, packaging tools)
+      - name: Install Linux GUI Dependencies
+        if: runner.os == 'Linux' && matrix.is_musl != true
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libssl-dev \
+            pkg-config \
+            build-essential \
+            curl \
+            wget \
+            file \
+            squashfs-tools \
+            rpm
+
+      # Musl C++ toolchain for compiling DuckDB (C++) with musl libc
+      - name: Install Linux Musl C++ Toolchain
+        if: matrix.is_musl == true
+        run: |
+          curl -fsSL https://musl.cc/x86_64-linux-musl-native.tgz | sudo tar -xz -C /opt
+          sudo ln -sf /opt/x86_64-linux-musl-native/bin/* /usr/local/bin/
+
+      - name: Install Frontend Dependencies
+        working-directory: frontend
+        run: npm ci || npm install
+
+      - name: Run Svelte 5 & TypeScript Diagnostic Checks
+        working-directory: frontend
+        run: npm run check
+
+      - name: Compile Frontend Assets
+        working-directory: frontend
+        run: npm run build
+
+      # Build Tauri Desktop Application (GLIBC, Windows, macOS)
+      - name: Build Tauri Desktop Application
+        if: matrix.is_musl != true
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: backend
+          args: ${{ matrix.args }}
+
+      # Build Linux MUSL Static Standalone Binary (sieve-core)
+      - name: Build Linux MUSL Target
+        if: matrix.is_musl == true
+        shell: bash
+        run: |
+          export CC_x86_64_unknown_linux_musl=x86_64-linux-musl-gcc
+          export CXX_x86_64_unknown_linux_musl=x86_64-linux-musl-g++
+          export AR_x86_64_unknown_linux_musl=/opt/x86_64-linux-musl-native/bin/ar
+          cargo build --release --target x86_64-unknown-linux-musl --no-default-features --manifest-path backend/Cargo.toml --bin sieve-core
+
+      # Stage artifacts into dedicated categories (Linux / macOS)
+      - name: Stage Artifacts (Linux / macOS)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          mkdir -p stage-binary/ stage-deb/ stage-rpm/ stage-appimage/ stage-dmg/ stage-app/
+          
+          if [ "${{ matrix.is_musl }}" = "true" ]; then
+            cp backend/target/x86_64-unknown-linux-musl/release/sieve-core stage-binary/sieve-linux-x86_64-musl
+            tar -czf stage-binary/sieve-musl-x86_64.tar.gz -C backend/target/x86_64-unknown-linux-musl/release sieve-core
+          else
+            # Standalone release binary
+            if [ -f "backend/target/${{ matrix.target }}/release/sieve" ]; then
+              cp "backend/target/${{ matrix.target }}/release/sieve" "stage-binary/sieve-${{ matrix.name }}"
+            elif [ -f "backend/target/release/sieve" ]; then
+              cp "backend/target/release/sieve" "stage-binary/sieve-${{ matrix.name }}"
+            fi
+
+            # Bundles
+            BUNDLE_DIR="backend/target/${{ matrix.target }}/release/bundle"
+            [ ! -d "$BUNDLE_DIR" ] && BUNDLE_DIR="backend/target/release/bundle"
+
+            if [ -d "$BUNDLE_DIR" ]; then
+              # Debian packages
+              find "$BUNDLE_DIR/deb" -type f -name "*.deb" -exec cp {} stage-deb/ \; 2>/dev/null || true
+              # RPM packages
+              find "$BUNDLE_DIR/rpm" -type f -name "*.rpm" -exec cp {} stage-rpm/ \; 2>/dev/null || true
+              # AppImage packages
+              find "$BUNDLE_DIR/appimage" -type f -name "*.AppImage" -exec cp {} stage-appimage/ \; 2>/dev/null || true
+              # macOS DMG packages
+              find "$BUNDLE_DIR/dmg" -type f -name "*.dmg" -exec cp {} stage-dmg/ \; 2>/dev/null || true
+              # macOS .app bundle zip
+              if [ -d "$BUNDLE_DIR/macos" ]; then
+                cd "$BUNDLE_DIR/macos"
+                zip -r "../../../../../stage-app/sieve-${{ matrix.name }}.app.zip" *.app 2>/dev/null || true
+                cd - > /dev/null
+              fi
+            fi
+          fi
+
+      # Stage artifacts into dedicated categories (Windows)
+      - name: Stage Artifacts (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          mkdir -p stage-binary/ stage-nsis/ stage-msi/
+          
+          # Standalone EXE binary
+          if [ -f "backend/target/${{ matrix.target }}/release/sieve.exe" ]; then
+            cp "backend/target/${{ matrix.target }}/release/sieve.exe" "stage-binary/sieve-windows-x86_64.exe"
+          elif [ -f "backend/target/release/sieve.exe" ]; then
+            cp "backend/target/release/sieve.exe" "stage-binary/sieve-windows-x86_64.exe"
+          fi
+
+          # Target installers (NSIS / MSI)
+          BUNDLE_DIR="backend/target/${{ matrix.target }}/release/bundle"
+          [ ! -d "$BUNDLE_DIR" ] && BUNDLE_DIR="backend/target/release/bundle"
+
+          if [ -d "$BUNDLE_DIR" ]; then
+            find "$BUNDLE_DIR/nsis" -type f -name "*.exe" -exec cp {} stage-nsis/ \; 2>/dev/null || true
+            find "$BUNDLE_DIR/msi" -type f -name "*.msi" -exec cp {} stage-msi/ \; 2>/dev/null || true
+          fi
+
+      # Upload 1: Standalone Binary (All Platforms)
+      - name: Upload Standalone Binary Artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: sieve-${{ matrix.name }}
+          path: stage-binary/*
+          if-no-files-found: ignore
+          retention-days: 14
+
+      # Upload 2: Debian Package (.deb) (Linux GNU)
+      - name: Upload Debian Package (.deb)
+        if: matrix.is_linux_gnu == true
+        uses: actions/upload-artifact@v7
+        with:
+          name: sieve-linux-x86_64-deb
+          path: stage-deb/*
+          if-no-files-found: ignore
+          retention-days: 14
+
+      # Upload 3: RPM Package (.rpm) (Linux GNU)
+      - name: Upload RPM Package (.rpm)
+        if: matrix.is_linux_gnu == true
+        uses: actions/upload-artifact@v7
+        with:
+          name: sieve-linux-x86_64-rpm
+          path: stage-rpm/*
+          if-no-files-found: ignore
+          retention-days: 14
+
+      # Upload 4: AppImage (.AppImage) (Linux GNU)
+      - name: Upload AppImage Package (.AppImage)
+        if: matrix.is_linux_gnu == true
+        uses: actions/upload-artifact@v7
+        with:
+          name: sieve-linux-x86_64-appimage
+          path: stage-appimage/*
+          if-no-files-found: ignore
+          retention-days: 14
+
+      # Upload 5: macOS DMG (.dmg)
+      - name: Upload macOS DMG (.dmg)
+        if: startsWith(matrix.name, 'macos-')
+        uses: actions/upload-artifact@v7
+        with:
+          name: sieve-${{ matrix.name }}-dmg
+          path: stage-dmg/*
+          if-no-files-found: ignore
+          retention-days: 14
+
+      # Upload 6: macOS App (.app.zip)
+      - name: Upload macOS App (.app.zip)
+        if: startsWith(matrix.name, 'macos-')
+        uses: actions/upload-artifact@v7
+        with:
+          name: sieve-${{ matrix.name }}-app
+          path: stage-app/*
+          if-no-files-found: ignore
+          retention-days: 14
+
+      # Upload 7: Windows NSIS Setup (.exe)
+      - name: Upload Windows NSIS Setup (.exe)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v7
+        with:
+          name: sieve-windows-x86_64-nsis
+          path: stage-nsis/*
+          if-no-files-found: ignore
+          retention-days: 14
+
+      # Upload 8: Windows MSI Installer (.msi)
+      - name: Upload Windows MSI Installer (.msi)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v7
+        with:
+          name: sieve-windows-x86_64-msi
+          path: stage-msi/*
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # ----------------------------------------------------------------------------
+  # Job 2: Create macOS Universal Binary (Lipo Fat Binary: arm64 + x86_64)
+  # ----------------------------------------------------------------------------
+  macos-universal:
+    name: macOS (Universal2 Fat Binary)
+    needs: [build]
+    runs-on: macos-latest
+    steps:
+      - name: Download Apple Silicon Binary
+        uses: actions/download-artifact@v8
+        with:
+          name: sieve-macos-aarch64
+          path: stage-aarch64
+
+      - name: Download Intel Mac Binary
+        uses: actions/download-artifact@v8
+        with:
+          name: sieve-macos-x86_64
+          path: stage-x86_64
+
+      - name: Assemble Universal2 Binary via Lipo
+        run: |
+          mkdir -p stage-universal/
+          lipo -create \
+            stage-aarch64/sieve-macos-aarch64 \
+            stage-x86_64/sieve-macos-x86_64 \
+            -output stage-universal/sieve-macos-universal
+          chmod +x stage-universal/sieve-macos-universal
+          file stage-universal/sieve-macos-universal
+          tar -czf stage-universal/sieve-macos-universal.tar.gz -C stage-universal sieve-macos-universal
+
+      - name: Upload macOS Universal Binary
+        uses: actions/upload-artifact@v7
+        with:
+          name: sieve-macos-universal
+          path: stage-universal/*
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # ----------------------------------------------------------------------------
+  # Job 3: Consolidate & Publish GitHub Release (Tags / Manual Trigger)
+  # ----------------------------------------------------------------------------
+  publish-release:
+    name: Consolidate & Publish Release
+    needs: [build, macos-universal]
+    if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.draft_release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v7
+
+      - name: Download All Platform Artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: all-artifacts
+
+      - name: Consolidate Release Assets & Generate Checksums
+        run: |
+          mkdir -p release-assets/
+          
+          # Flatten all artifact files into release-assets/
+          find all-artifacts -type f -exec cp {} release-assets/ \;
+          
+          cd release-assets/
+          rm -f SHA256SUMS.txt
+          sha256sum * > SHA256SUMS.txt
+          cd ..
+          
+          echo "=== Consolidated Release Assets ==="
+          ls -la release-assets/
+          cat release-assets/SHA256SUMS.txt
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          files: release-assets/*
+          name: Sieve ${{ github.ref_name }}
+          draft: ${{ github.event.inputs.draft_release == 'true' }}
+          prerelease: false
+          generate_release_notes: true
