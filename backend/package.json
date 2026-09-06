@@ -1,0 +1,9 @@
+{
+  "name": "sieve-backend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build:frontend": "npm --prefix ../frontend run build",
+    "dev:frontend": "npm --prefix ../frontend run dev"
+  }
+}

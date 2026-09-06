@@ -11,6 +11,7 @@
     "test": "cargo test --manifest-path backend/Cargo.toml",
     "tauri": "cargo tauri",
     "build:frontend": "npm --prefix frontend run build",
+    "dev:frontend": "npm --prefix frontend run dev",
     "build:docker": "docker compose up --build"
   },
   "keywords": [

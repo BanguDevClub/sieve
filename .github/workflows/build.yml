@@ -124,7 +124,8 @@ jobs:
       - name: Install Linux Musl C++ Toolchain
         if: matrix.is_musl == true
         run: |
-          curl -fsSL https://musl.cc/x86_64-linux-musl-native.tgz | sudo tar -xz -C /opt
+          (curl -4 -fsSL --connect-timeout 15 --retry 5 --retry-connrefused https://musl.cc/x86_64-linux-musl-native.tgz || \
+           curl -4 -fsSL --connect-timeout 15 --retry 5 --retry-connrefused https://more.musl.cc/11.2.1/x86_64-linux-musl/x86_64-linux-musl-native.tgz) | sudo tar -xz -C /opt
           sudo ln -sf /opt/x86_64-linux-musl-native/bin/* /usr/local/bin/
 
       - name: Install Frontend Dependencies
