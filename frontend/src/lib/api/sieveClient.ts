@@ -251,11 +251,11 @@ export async function queryPage(req: PageRequest): Promise<PageResult> {
 
 export async function runCustomSql(
   query: string,
-  maxRows = 100
+  maxRows?: number
 ): Promise<SqlResult> {
   if (isTauri()) {
     const { invoke } = await import('@tauri-apps/api/core');
-    return invoke<SqlResult>('run_custom_sql', { query, maxRows });
+    return invoke<SqlResult>('run_custom_sql', { query, maxRows: maxRows ?? null });
   }
 
   const start = performance.now();
@@ -263,7 +263,7 @@ export async function runCustomSql(
 
   // Simple mock handling for common queries
   let cols = MOCK_COLUMNS.slice(0, 8);
-  let rows = mockRows.slice(0, Math.min(maxRows, 50)).map((r) => r.slice(0, 8));
+  let rows = (maxRows !== undefined ? mockRows.slice(0, maxRows) : mockRows).map((r) => r.slice(0, 8));
 
   if (query.toLowerCase().includes('count(*)')) {
     cols = [{ name: 'total_records', data_type: 'BIGINT' }];

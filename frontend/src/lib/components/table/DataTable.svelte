@@ -170,7 +170,7 @@
                 <div class="sieve-no-data-content">
                   <Icon name="search" size={24} color="var(--text-dim)" />
                   <p>No records match the current filter criteria.</p>
-                  {#if appState.filters.length > 0}
+                  {#if appState.appliedFilters.length > 0}
                     <Button
                       variant="secondary"
                       size="sm"

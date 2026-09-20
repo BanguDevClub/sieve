@@ -28,7 +28,7 @@
     errorMessage = '';
 
     try {
-      const res = await api.runCustomSql(sqlQuery, 100);
+      const res = await api.runCustomSql(sqlQuery);
       sqlResult = res;
     } catch (err: any) {
       errorMessage = err?.message || String(err);

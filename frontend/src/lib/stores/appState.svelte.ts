@@ -40,7 +40,9 @@ class AppStateStore {
 
   // Filters & Sorting
   filters = $state<FilterRule[]>([]);
+  appliedFilters = $state<FilterRule[]>([]);
   filterConjunction = $state<'AND' | 'OR'>('AND');
+  appliedFilterConjunction = $state<'AND' | 'OR'>('AND');
   sortRule = $state<SortRule | null>(null);
 
   // Interactive column widths
@@ -149,6 +151,9 @@ class AppStateStore {
       this.currentPage = 1;
       this.colOffset = 0;
       this.filters = [];
+      this.appliedFilters = [];
+      this.filterConjunction = 'AND';
+      this.appliedFilterConjunction = 'AND';
       this.sortRule = null;
 
       const widths: Record<string, number> = {};
@@ -182,6 +187,9 @@ class AppStateStore {
       this.currentPage = 1;
       this.colOffset = 0;
       this.filters = [];
+      this.appliedFilters = [];
+      this.filterConjunction = 'AND';
+      this.appliedFilterConjunction = 'AND';
       this.sortRule = null;
       
       // Auto-initialize default column widths
@@ -221,8 +229,8 @@ class AppStateStore {
         page_size: this.pageSize,
         col_offset: this.colOffset,
         col_limit: this.colLimit,
-        filters: this.filters,
-        filter_conjunction: this.filterConjunction,
+        filters: this.appliedFilters,
+        filter_conjunction: this.appliedFilterConjunction,
         sort: this.sortRule,
       });
       this.pageResult = res;
@@ -336,12 +344,18 @@ class AppStateStore {
 
   removeFilter(id: string) {
     this.filters = this.filters.filter((f) => f.id !== id);
+  }
+
+  applyFilters() {
+    this.appliedFilters = this.filters.map((f) => ({ ...f }));
+    this.appliedFilterConjunction = this.filterConjunction;
     this.currentPage = 1;
     this.refreshData();
   }
 
   clearFilters() {
     this.filters = [];
+    this.appliedFilters = [];
     this.currentPage = 1;
     this.refreshData();
   }

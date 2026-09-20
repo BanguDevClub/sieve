@@ -55,7 +55,7 @@ fn main() {
     println!("  Load time: {} ms", meta.load_time_ms);
 
     println!("\nExecuting query: {}", query);
-    match engine.execute_sql(&query, 20, cancel) {
+    match engine.execute_sql(&query, Some(20), cancel) {
         Ok(res) => {
             println!("Query executed in {} ms ({} rows returned):", res.execution_time_ms, res.total_rows);
             for col in &res.columns {

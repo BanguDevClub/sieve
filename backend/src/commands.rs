@@ -193,13 +193,12 @@ pub async fn run_custom_sql(
     state.reset_cancel();
     let engine = state.engine.clone();
     let cancel_token = state.cancel_token.clone();
-    let limit = max_rows.unwrap_or(100);
 
     tokio::task::spawn_blocking(move || {
         let eng = engine
             .lock()
             .map_err(|e| format!("Lock acquisition failed: {}", e))?;
-        eng.execute_sql(&query, limit, cancel_token)
+        eng.execute_sql(&query, max_rows, cancel_token)
     })
     .await
     .map_err(|e| format!("Task execution error: {}", e))?

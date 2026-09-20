@@ -31,15 +31,10 @@
 
   function toggleConjunction() {
     appState.filterConjunction = appState.filterConjunction === 'AND' ? 'OR' : 'AND';
-    if (appState.filters.length > 1) {
-      appState.currentPage = 1;
-      appState.refreshData();
-    }
   }
 
   function handleFilterSubmit() {
-    appState.currentPage = 1;
-    appState.refreshData();
+    appState.applyFilters();
   }
 </script>
 
@@ -48,8 +43,8 @@
     <div class="filter-header-left">
       <Icon name="filter" size={15} color="var(--accent)" />
       <span class="filter-title">Advanced Filters</span>
-      {#if appState.filters.length > 0}
-        <Badge variant="accent">{appState.filters.length} active</Badge>
+      {#if appState.appliedFilters.length > 0}
+        <Badge variant="accent">{appState.appliedFilters.length} active</Badge>
       {/if}
     </div>
 
@@ -74,7 +69,7 @@
         Add Filter
       </Button>
 
-      {#if appState.filters.length > 0}
+      {#if appState.filters.length > 0 || appState.appliedFilters.length > 0}
         <Button
           variant="danger"
           size="sm"
@@ -104,7 +99,6 @@
               bind:value={filter.column}
               searchable={true}
               placeholder="Select Column..."
-              onchange={() => handleFilterSubmit()}
             />
           </div>
 
@@ -114,7 +108,6 @@
               options={OPERATOR_OPTIONS}
               bind:value={filter.operator}
               placeholder="Operator..."
-              onchange={() => handleFilterSubmit()}
             />
           </div>
 

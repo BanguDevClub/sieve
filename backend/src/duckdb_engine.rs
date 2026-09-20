@@ -464,7 +464,7 @@ impl DuckDbEngine {
     pub fn execute_sql(
         &self,
         sql: &str,
-        max_rows: usize,
+        max_rows: Option<usize>,
         cancel_token: Arc<AtomicBool>,
     ) -> Result<SqlResult, String> {
         let start_time = Instant::now();
@@ -494,7 +494,6 @@ impl DuckDbEngine {
             .collect();
 
         let mut rows = Vec::new();
-        let limit = max_rows.clamp(1, 100);
         while let Some(row) = query_rows.next().map_err(|e| e.to_string())? {
             if cancel_token.load(Ordering::Relaxed) {
                 return Err("Query cancelled".to_string());
@@ -507,8 +506,10 @@ impl DuckDbEngine {
             }
             rows.push(row_values);
 
-            if rows.len() >= limit {
-                break;
+            if let Some(limit) = max_rows {
+                if rows.len() >= limit {
+                    break;
+                }
             }
         }
 
@@ -815,8 +816,23 @@ mod tests {
         engine.open_csv(path, cancel.clone(), |_| {}).unwrap();
 
         let sql = "SELECT department, COUNT(*) as count FROM sieve GROUP BY department ORDER BY department;";
-        let res = engine.execute_sql(sql, 100, cancel).unwrap();
+        let res = engine.execute_sql(sql, None, cancel).unwrap();
         assert_eq!(res.rows.len(), 3); // Engineering, Finance, Marketing
+    }
+
+    #[test]
+    fn test_custom_sql_unlimited_rows() {
+        let engine = DuckDbEngine::new().unwrap();
+        let cancel = Arc::new(AtomicBool::new(false));
+
+        // Test querying 250 rows with max_rows = None (should return all 250 rows, not clamped to 100)
+        let sql = "SELECT range AS id FROM range(250);";
+        let res = engine.execute_sql(sql, None, cancel.clone()).unwrap();
+        assert_eq!(res.rows.len(), 250);
+
+        // Test querying with explicit max_rows = Some(150) (should return 150 rows, not clamped to 100)
+        let res_limited = engine.execute_sql(sql, Some(150), cancel).unwrap();
+        assert_eq!(res_limited.rows.len(), 150);
     }
 
     #[test]
@@ -824,7 +840,7 @@ mod tests {
         let engine = DuckDbEngine::new().unwrap();
         let cancel = Arc::new(AtomicBool::new(false));
         let sql = "SELECT DATE '2024-02-01' as d, TIMESTAMP '2024-02-01 14:30:00' as ts;";
-        let res = engine.execute_sql(sql, 10, cancel).unwrap();
+        let res = engine.execute_sql(sql, Some(10), cancel).unwrap();
         assert_eq!(res.rows.len(), 1);
         assert_eq!(res.rows[0][0], serde_json::json!("2024-02-01"));
         assert_eq!(res.rows[0][1], serde_json::json!("2024-02-01 14:30:00"));
